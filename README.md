@@ -47,14 +47,6 @@ Zepto modules are individual files in the "src/" directory.
 </tr></thead>
 <tbody>
   <tr>
-    <th><a href="https://github.com/madrobby/zepto/blob/master/src/polyfill.js#files">polyfill</a></th>
-    <td>✔</td>
-    <td>
-      Provides String.prototype.trim and Array.prototype.reduce methods
-      if they are missing (required for iOS 3.x)
-    </td>
-  </tr>
-  <tr>
     <th><a href="https://github.com/madrobby/zepto/blob/master/src/zepto.js#files">zepto</a></th>
     <td>✔</td>
     <td>Core module; contains most methods</td>
@@ -124,7 +116,10 @@ href="https://github.com/madrobby/zepto/blob/master/src/selector.js#files">selec
   <tr>
     <th><a href="https://github.com/madrobby/zepto/blob/master/src/touch.js#files">touch</a></th>
     <td></td>
-    <td>Fires tap– and swipe–related events on touch devices</td>
+    <td>
+      Fires tap– and swipe–related events on touch devices. This works with both
+      `touch` (iOS, Android) and `pointer` events (Windows Phone).
+    </td>
   </tr>
   <tr>
     <th><a href="https://github.com/madrobby/zepto/blob/master/src/gesture.js#files">gesture</a></th>
@@ -136,6 +131,22 @@ href="https://github.com/madrobby/zepto/blob/master/src/selector.js#files">selec
     <td></td>
     <td>Provides <code>andSelf</code> &amp; <code>end()</code> chaining methods</td>
   </tr>
+  <tr>
+    <th><a href="https://github.com/madrobby/zepto/blob/master/src/ios3.js#files">ios3</a></th>
+    <td></td>
+    <td>
+      String.prototype.trim and Array.prototype.reduce methods
+      (if they are missing) for compatibility with iOS 3.x.
+    </td>
+  </tr>
+  <tr>
+    <th><a href="https://github.com/madrobby/zepto/blob/master/src/ie.js#files">ie</a></th>
+    <td></td>
+    <td>
+      Experimental support for Internet Explorer 10+ on desktop and Windows Phone 8.
+      (Some tests are failing. Help us fix this!)
+    </td>
+  </tr>
 </tbody>
 </table>
 
@@ -143,7 +154,6 @@ href="https://github.com/madrobby/zepto/blob/master/src/selector.js#files">selec
 
 Get in touch:
 
-* IRC channel: [#zepto on freenode.net](irc://irc.freenode.net/zepto)
 * @[zeptojs](http://twitter.com/zeptojs)
 
 ### Write documentation
@@ -180,6 +190,9 @@ $ ./make test
 $ script/test
 ~~~
 
+To run manually run tests (all except for the ajax module) on a device,
+you can serve the whole Zepto folder on a web server and open
+`test/index.html` in the device's browser.
 
   [zeptojs.com]: http://zeptojs.com
   [master]: https://github.com/madrobby/zepto/commits/master

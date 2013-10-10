@@ -7,9 +7,11 @@
   <title>Zepto FX unit tests</title>
   <script src="../vendor/evidence.js"></script>
   <script src="evidence_runner.js"></script>
+  <script src="../src/polyfill.js"></script>
   <script src="../src/zepto.js"></script>
   <script src="../src/event.js"></script>
   <script src="../src/fx.js"></script>
+  <script src="../src/ie.js"></script>
   <style>
     @-webkit-keyframes animName {
       0% {
@@ -58,6 +60,7 @@
     <div id="animtest_2" style="width:40px;height:40px;background:red"></div>
     <div id="durationtest_1" style="width:40px;height:40px;background:red"></div>
     <div id="durationtest_2" style="width:40px;height:40px;background:red"></div>
+    <div id="delaytest" style="width:40px;height:40px;background:red"></div>
   </div>
   <div class=fixtures-right>
     <div id="durationtest_3" style="width:40px;height:40px;background:red"></div>
@@ -167,6 +170,15 @@
         }, 'fast')
 
         t.assertStyle('0.2s', el, 'transition-duration', 'expected fast duration')
+      },
+
+      testDelay: function(t){
+        var el1 = $('#delaytest').animate({
+          translate3d: '80px, 20px, 100px',
+          rotateZ: '90deg',
+          opacity: 0.5 }, { delay: 200 })
+
+        t.assertStyle('0.2s', el1, 'transition-delay', 'expected delay to be set')
       },
 
       testCallback: function(t){

@@ -7,10 +7,9 @@
   <title>Zepto DOM unit tests</title>
   <script src="../vendor/evidence.js"></script>
   <script src="evidence_runner.js"></script>
-  <script src="../src/polyfill.js"></script>
   <script src="../src/zepto.js"></script>
   <script src="../src/event.js"></script>
-  <!--<script src="../dist/zepto.min.js"></script>-->
+  <script src="../src/ie.js"></script>
   <style>
     #get_style_element {
       font-size: 48px;
@@ -52,10 +51,6 @@
   <div id="data_attr" data-foo="bar" data-foo-bar="baz" data-empty></div>
 
   <form id="attr_with_text_input">
-    <input value="Default input">
-    <input type="text" value="Text input">
-    <input type="email" value="Email input">
-    <input type="search" value="Search input">
   </form>
 
   <div class="htmltest" id="htmltest1"></div>
@@ -65,6 +60,7 @@
 
   <div id="texttest1" class="texttest"><span>Here <strong>is</strong> some text</span></div>
   <div id="texttest2" class="texttest">And <em>some more</em></div>
+  <div id="texttest3" class="texttest"></div>
 
   <div id="beforeafter_container"><div id="beforeafter"></div></div>
   <div id="appendtoprependto_container"><div id="appendtoprependto"></div></div>
@@ -142,13 +138,17 @@
   </div>
 
   <style>
-    .hidden { display: none; }
+    .hidden {
+      display: none;
+    }
+
     #show_hide_span1,
     #show_hide_span2 {
-      display:block
+      display: block;
     }
+
     #show_hide_div1 {
-      display:inline-block
+      display: inline-block;
     }
   </style>
 
@@ -227,6 +227,10 @@
   <svg></svg>
 
   <iframe src="fixtures/iframe_document.html"></iframe>
+
+  <iframe id="link_target_iframe" name="link_target_iframe" width="10" height="10"></iframe>
+  <a id="link_that_will_be_prevented" href="fixtures/iframe_document.html" target="link_target_iframe"></a>
+
 
   </div><!-- fixtures -->
 
@@ -468,6 +472,10 @@
         $.zepto.Z = oldZ
         var Z3 = $('')
         t.assertLength(2, calls)
+
+        t.assertFalse($.zepto.isZ())
+        t.assertFalse($.zepto.isZ([]))
+        t.assertTrue($.zepto.isZ($('body')))
       },
 
       testDollar: function(t){
@@ -503,7 +511,15 @@
         t.assertEqualCollection(['a', 'b', 'c'], zepto)
 
         t.assert($({}))
-        t.assertTrue($({ a:true })[0].a)
+        t.assertTrue($({ a: true })[0].a)
+
+        // Plain objects wrapped by a Zepto collection
+        // should still refer to the original object
+        // This is required for events on plain objects
+        var plainObject = { a: 1 }
+        $(plainObject).get(0).a = 2
+        t.assertEqual(2, plainObject.a)
+        t.assertEqual(2, $(plainObject).get(0).a)
       },
 
       testGetWithoutIndex: function(t){
@@ -887,9 +903,6 @@
         t.assertEqual('H1DIVDIV', $('h1,div.htmltest').pluck('tagName').join(''))
       },
 
-      // for now, we brute-force "display:block" for show/hide
-      // need to change that to work better with inline elements in the future
-
       testShow: function(t){
         $('#show_hide_div1').show()
         t.assertEqual('inline-block', getComputedStyle($('#show_hide_div1').get(0)).display)
@@ -999,6 +1012,15 @@
         var viewportHeight = $(window).height()
         t.assert(viewportHeight > 0 || viewportHeight === 0)
         t.assert($(document).height())
+
+        // with a tall element on the page,
+        // the window (viewport) should be shorter than the total
+        // document height
+        $('<div style="height:9999px" id="very_high"></div>').appendTo('body')
+        t.assert(
+          $(window).height() < $(document).height(),
+          "'window' height was not smaller than 'document' height?")
+        $('#very_high').remove()
 
         t.assertIdentical(50, $('#offset').height())
         $('#offset').height('60px')
@@ -1411,15 +1433,16 @@
       testCSS: function(t){
         var el = $('#some_element').get(0)
 
+        // single assignments
         $('#some_element').css('color', '#f00')
         $('#some_element').css('margin-top', '10px')
         $('#some_element').css('marginBottom', '5px')
         $('#some_element').css('left', 42)
         $('#some_element').css('z-index', 10)
         $('#some_element').css('fontWeight', 300)
-        $('#some_element').css('border', '1px solid rgba(255,0,0,1)')
+        $('#some_element').css('border', '1px solid rgba(255,0,0,0)')
         t.assertEqual('rgb(255, 0, 0)', el.style.color)
-        t.assertEqual('rgb(255, 0, 0)', el.style.borderLeftColor)
+        t.assertEqual('rgba(255, 0, 0, 0)', el.style.borderLeftColor)
         t.assertEqual('1px', el.style.borderLeftWidth)
         t.assertEqual('10px', el.style.marginTop)
         t.assertEqual('5px', el.style.marginBottom)
@@ -1427,28 +1450,47 @@
         t.assertEqual(300, el.style.fontWeight)
         t.assertEqual(10, el.style.zIndex)
 
-        var style1 = $('#some_element').css('color')
-        var style2 = $('#some_element').css('border')
-        t.assertEqual('rgb(255, 0, 0)', style1)
-        t.assertEqual('1px solid rgb(255, 0, 0)', style2)
+        // read single values, including shorthands
+        t.assertEqual('rgb(255, 0, 0)',
+          $('#some_element').css('color'))
+        t.assertEqual('1px solid rgba(255, 0, 0, 0)',
+          $('#some_element').css('border'))
 
+        // multiple assignments
         $('#some_element').css({
           'border': '2px solid #000',
           'color': 'rgb(0,255,0)',
           'padding-left': '2px'
         })
-
         t.assertEqual('2px', $('#some_element').css('borderLeftWidth'))
         t.assertEqual('solid', $('#some_element').css('borderLeftStyle'))
         t.assertEqual('rgb(0, 0, 0)', $('#some_element').css('borderLeftColor'))
         t.assertEqual('rgb(0, 255, 0)', $('#some_element').css('color'))
         t.assertEqual('2px', $('#some_element').css('paddingLeft'))
-
         t.assertEqual('2px', $('#some_element').css('border-left-width'))
         t.assertEqual('solid', $('#some_element').css('border-left-style'))
         t.assertEqual('rgb(0, 0, 0)', $('#some_element').css('border-left-color'))
         t.assertEqual('rgb(0, 255, 0)', $('#some_element').css('color'))
         t.assertEqual('2px', $('#some_element').css('padding-left'))
+
+        // read multiple values, camelCased CSS
+        var arrCamelCss = $('#some_element').css(['borderLeftWidth', 'borderLeftStyle', 'borderLeftColor', 'color'])
+        t.assertEqual('2px', arrCamelCss['borderLeftWidth'])
+        t.assertEqual('solid', arrCamelCss['borderLeftStyle'])
+        t.assertEqual('rgb(0, 0, 0)', arrCamelCss['borderLeftColor'])
+        t.assertEqual('rgb(0, 255, 0)', arrCamelCss['color'])
+        t.assertUndefined(arrCamelCss['paddingLeft'])
+
+        // read multiple values, dashed CSS property names
+        var arrDashedCss = $('#some_element').css(['border-left-width', 'border-left-style', 'border-left-color', 'color'])
+        t.assertEqual('2px', arrDashedCss['border-left-width'])
+        t.assertEqual('solid', arrDashedCss['border-left-style'])
+        t.assertEqual('rgb(0, 0, 0)', arrDashedCss['border-left-color'])
+        t.assertEqual('rgb(0, 255, 0)', arrDashedCss['color'])
+        t.assertUndefined(arrDashedCss['padding-left'])
+
+        // make sure reads from empty Zepto collections just return undefined
+        t.assertUndefined($().css(['border-left-width']))
 
         var div = $('#get_style_element')
         t.assertEqual('48px', div.css('font-size'))
@@ -1488,7 +1530,7 @@
         t.assertIdentical('0', dom.style.opacity)
       },
 
-      testCSSOnNonExistElm: function (t) {
+      testCSSOnNonExistingElement: function (t) {
         var errorWasRaised = false
         try {
           var color = $('.some-non-exist-elm').css('color')
@@ -1499,9 +1541,12 @@
       },
 
       testHtml: function(t){
-        var div = $('div.htmltest')
-        t.assertIdentical(div, div.html('yowza'))
+        var div = $('div.htmltest');
 
+        div.text(undefined);
+        t.assertEqual('', div.html());
+
+        t.assertIdentical(div, div.html('yowza'))
         t.assertEqual('yowza', document.getElementById('htmltest1').innerHTML)
         t.assertEqual('yowza', document.getElementById('htmltest2').innerHTML)
 
@@ -1534,6 +1579,21 @@
       },
 
       testText: function(t){
+        // test basics with Zepto-created DOM elements
+        t.assertEqual('',         $('<h1/>').text())
+        t.assertEqual('',         $('<h1/>').text('').text())
+        t.assertEqual('',         $('<h1/>').text(undefined).text())
+        t.assertEqual('null',     $('<h1/>').text(null).text())
+        t.assertEqual('1',        $('<h1/>').text(1).text())
+        t.assertEqual('<b>a</b>', $('<h1/>').text('<b>a</b>').text())
+
+        t.assertEqual('&lt;b&gt;a&lt;/b&gt;',
+          $('<h1/>').text('<b>a</b>').html())
+
+        // now test with some existing DOM elements
+        $('#texttest3').text(undefined)
+        t.assertEqual('', $('#texttest3').text())
+
         t.assertEqual('Here is some text', $('div.texttest').text())
         t.assertEqual('And some more', $('#texttest2').text())
 
@@ -1605,7 +1665,17 @@
       },
 
       testAttrOnTextInputField: function(t) {
-        var inputs = $('#attr_with_text_input input'), values
+        var inputs, values
+
+        // HTML is set here because IE does not reset
+        // values of input fields on page reload
+        document.getElementById('attr_with_text_input').innerHTML =
+          '<input value="Default input">'+
+          '<input type="text" value="Text input">'+
+          '<input type="email" value="Email input">'+
+          '<input type="search" value="Search input">'
+
+        inputs = $('#attr_with_text_input input')
 
         values = $.map(inputs, function(i){ return $(i).attr('value') })
         t.assertEqual('Default input, Text input, Email input, Search input', values.join(', '))
@@ -1694,7 +1764,15 @@
       testVal: function(t) {
         var input = $('#attr_val')
 
+        // some browsers like IE don't reset input values on reload
+        // which messes up repeated test runs, so set the start value
+        // directly via the DOM API
+        document.getElementById('attr_val').value = 'Hello World'
+
         t.assertEqual('Hello World', input.val())
+
+        input.val(undefined);
+        t.assertEqual('undefined', input.val());
 
         input.val('')
         t.assertEqual('', input.val())
@@ -1738,11 +1816,12 @@
         t.assertEqual('plugin!', el.innerHTML)
 
         // test if existing Zepto objects receive new plugins
+        var $some_element = $('#some_element')
         $.fn.anotherplugin = function(){
           return this.each(function(){ this.innerHTML = 'anotherplugin!' })
         }
-        t.assert(typeof $('#some_element').anotherplugin == 'function')
-        $('#some_element').anotherplugin()
+        t.assert(typeof $some_element.anotherplugin == 'function')
+        $some_element.anotherplugin()
         t.assertEqual('anotherplugin!', el.innerHTML)
       },
 
@@ -1864,7 +1943,7 @@
       },
 
       testAppendToPrependTo: function(t){
-        //testing with Zepto object
+        // testing with Zepto object
         function div(contents){
           var el = document.createElement('div')
           el.innerHTML = contents
@@ -1877,7 +1956,7 @@
         var ap2 = ap.appendTo($('#appendtoprependto'))
         var pr2 = pr.prependTo($('#appendtoprependto'))
 
-        // Test the object returned is correct for method chaining
+        // the object returned is the correct one for method chaining
         t.assertSame(ap, ap2)
         t.assertSame(pr, pr2)
 
@@ -1887,21 +1966,19 @@
           $('#appendtoprependto_container').html()
         )
 
-        //testing with a zepto object of more than one element as parameter
+        // zepto object with more than one element
         $(document.body).append('<div class="appendto">appendto1</div><div class="appendto">appendto2</div>')
         $(document.body).append('<div class="prependto">prependto1</div><div class="prependto">prependto2</div>')
 
-        $('#appendtoprependto_container').html('<div id="appendtoprependto"></div>')
+        // selector
 
-        $('.appendto').appendTo($('#appendtoprependto'))
-        $('.prependto').prependTo($('#appendtoprependto'))
+        // Note that on IE resetting the parent element to be empty will
+        // cause inserted elements to be emptied out, so we have to re-create
+        // them. This is the same behavior as on jQuery.
+        // (Other browsers don't exhibit this problem.)
+        ap = $(div('appendto'))
+        pr = $(div('prependto'))
 
-        t.assertEqual(
-          '<div id="appendtoprependto"><div class="prependto">prependto1</div><div class="prependto">prependto2</div><div class="appendto">appendto1</div><div class="appendto">appendto2</div></div>',
-          $('#appendtoprependto_container').html()
-        )
-
-        //testing with a selector as parameter
         $('#appendtoprependto_container').html('<div id="appendtoprependto"></div>')
         ap.appendTo('#appendtoprependto')
         pr.prependTo('#appendtoprependto')
@@ -1910,10 +1987,22 @@
           '<div>appendto</div></div>',
           $('#appendtoprependto_container').html()
         )
+
+        // reset test elements
+        ap = $(div('appendto'))
+        pr = $(div('prependto'))
+        $('#appendtoprependto_container').html('<div id="appendtoprependto"></div>')
+        $('.appendto').appendTo($('#appendtoprependto'))
+        $('.prependto').prependTo($('#appendtoprependto'))
+
+        t.assertEqual(
+          '<div id="appendtoprependto"><div class="prependto">prependto1</div><div class="prependto">prependto2</div><div class="appendto">appendto1</div><div class="appendto">appendto2</div></div>',
+          $('#appendtoprependto_container').html()
+        )
       },
 
       testInsertBeforeInsertAfter: function(t){
-        //testing with Zepto object
+        // testing with Zepto object
         function div(contents){
           var el = document.createElement('div')
           el.innerHTML = contents
@@ -1927,14 +2016,14 @@
         var ib2 = ib.insertBefore(ibia)
         var ia2 = ia.insertAfter(ibia)
 
-        // Test the object returned is correct for method chaining
+        // test the object returned is correct for method chaining
         t.assertEqual(
           '<div>insertbefore</div><div id="insertbeforeinsertafter">'+
           '</div><div>insertafter</div>',
           $('#insertbeforeinsertafter_container').html()
         )
 
-        //testing with a zepto object of more than one element as parameter
+        // testing with a zepto object of more than one element as parameter
         $(document.body).append('<div class="insertbefore">insertbefore1</div><div class="insertbefore">insertbefore2</div>')
         $(document.body).append('<div class="insertafter">insertafter1</div><div class="insertafter">insertafter2</div>')
 
@@ -1950,9 +2039,12 @@
           $('#insertbeforeinsertafter_container').html()
         )
 
-        //testing with a selector as parameter
+        // testing with a selector as parameter
         $('#insertbeforeinsertafter_container').html('<div id="insertbeforeinsertafter"></div>')
 
+        // reset test elements
+        ib = $(div('insertbefore'))
+        ia = $(div('insertafter'))
         ib.insertBefore('#insertbeforeinsertafter')
         ia.insertAfter('#insertbeforeinsertafter')
 
@@ -2222,8 +2314,12 @@
       },
 
       testScrollTop: function(t) {
-        t.assert($(window).scrollTop() >= 0)
-        t.assert($(document.body).scrollTop() >= 0)
+        var $window = $(window), $body = $(document.body)
+        t.assert($window.scrollTop() >= 0)
+        t.assert($body.scrollTop() >= 0)
+
+        t.assertIdentical($window.scrollTop(20), $window)
+        t.assertIdentical($body.scrollTop(20),   $body)
       },
 
       testSort: function(t){
@@ -2367,16 +2463,33 @@
       },
 
       testTriggerEventCancelled: function(t){
-        $('#some_element').bind('custom', function(e){
-          e.preventDefault()
-        })
-        var event = $.Event('custom')
+        var event = $.Event('custom'),
+          element = $('<div/>'),
+          defaultPrevented = false,
+          isDefaultPrevented = false
+
         t.refute(event.defaultPrevented)
         t.refute(event.isDefaultPrevented())
 
-        $('#some_element').trigger(event)
-        t.assert(event.defaultPrevented)
-        t.assert(event.isDefaultPrevented())
+        element.bind('custom', function(e){
+          e.preventDefault()
+          defaultPrevented = e.defaultPrevented
+          isDefaultPrevented = e.isDefaultPrevented()
+        })
+
+        element.trigger(event)
+
+        // FIXME: on IE10 the following tests fail because, well,
+        // because IE is a bag of dicks by changing the value of these
+        // variables back to their default states after dispatchEvent
+        // returns. (This works fine on other browsers.)
+        // For the bug and details see
+        // http://connect.microsoft.com/IE/feedback/details/790389/event-defaultprevented-returns-false-after-preventdefault-was-called
+        // t.assertTrue(event.defaultPrevented)
+        // t.assertTrue(event.isDefaultPrevented())
+
+        t.assertTrue(defaultPrevented)
+        t.assertTrue(isDefaultPrevented)
       },
 
       testTriggerHandler: function(t){
@@ -2554,11 +2667,44 @@
       },
 
       testDelegateReturnFalse: function(t){
-        $(document.body).delegate('#some_element', 'click', function(){ return false })
+        $(document.body).delegate('#link_that_will_be_prevented', 'click', function(){
+          return false
+        })
 
         var event = $.Event('click')
-        $('#some_element').trigger(event)
-        t.assertTrue(event.defaultPrevented)
+        $('#link_that_will_be_prevented').trigger(event)
+
+        // IE10 resets this property after dispatchEvent returns.
+        // Let's test if (as expected) there's nothing loaded into the iframe.
+        // t.assertTrue(event.defaultPrevented)
+
+        t.pause()
+        setTimeout(function(){
+          t.resume(function(){
+            var text = $('#link_target_iframe')[0].contentDocument.body.innerText
+            t.assert(!text.match(/Hello from iframe/))
+          })
+        }, 500)
+      },
+
+      testDelegateReturnValueShouldntPreventDefault: function(t){
+        $(document.body).delegate('#link_that_will_be_prevented', 'click', function(){
+        })
+
+        var event = $.Event('click')
+        $('#link_that_will_be_prevented').trigger(event)
+
+        // IE10 resets this property after dispatchEvent returns.
+        // Let's test if (as expected) there is something loaded into the iframe.
+        // t.assertFalse(event.defaultPrevented)
+
+        t.pause()
+        setTimeout(function(){
+          t.resume(function(){
+            var text = $('#link_target_iframe')[0].contentDocument.body.innerText
+            t.assert(text.match(/Hello from iframe/))
+          })
+        }, 500)
       },
 
       testDelegateWithObject: function(t){
