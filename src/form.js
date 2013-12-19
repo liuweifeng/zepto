@@ -2,7 +2,7 @@
 //     (c) 2010-2013 Thomas Fuchs
 //     Zepto.js may be freely distributed under the MIT license.
 
-;(function ($) {
+;(function($){
   $.fn.serializeArray = function() {
     var result = [], el
     $([].slice.call(this.get(0).elements)).each(function(){
@@ -32,7 +32,7 @@
     else if (this.length) {
       var event = $.Event('submit')
       this.eq(0).trigger(event)
-      if (!event.defaultPrevented) this.get(0).submit()
+      if (!event.isDefaultPrevented()) this.get(0).submit()
     }
     return this
   }

@@ -18,7 +18,7 @@
   function triggerAndReturn(context, eventName, data) {
     var event = $.Event(eventName)
     $(context).trigger(event, data)
-    return !event.defaultPrevented
+    return !event.isDefaultPrevented()
   }
 
   // trigger an Ajax "global" event
@@ -45,16 +45,18 @@
 
     triggerGlobal(settings, context, 'ajaxSend', [xhr, settings])
   }
-  function ajaxSuccess(data, xhr, settings) {
+  function ajaxSuccess(data, xhr, settings, deferred) {
     var context = settings.context, status = 'success'
     settings.success.call(context, data, status, xhr)
+    if (deferred) deferred.resolveWith(context, [data, status, xhr])
     triggerGlobal(settings, context, 'ajaxSuccess', [xhr, settings, data])
     ajaxComplete(status, xhr, settings)
   }
   // type: "timeout", "error", "abort", "parsererror"
-  function ajaxError(error, type, xhr, settings) {
+  function ajaxError(error, type, xhr, settings, deferred) {
     var context = settings.context
     settings.error.call(context, xhr, type, error)
+    if (deferred) deferred.rejectWith(context, [xhr, type, error])
     triggerGlobal(settings, context, 'ajaxError', [xhr, settings, error || type])
     ajaxComplete(type, xhr, settings)
   }
@@ -69,41 +71,50 @@
   // Empty function, used as default callback
   function empty() {}
 
-  $.ajaxJSONP = function(options){
+  $.ajaxJSONP = function(options, deferred){
     if (!('type' in options)) return $.ajax(options)
 
     var _callbackName = options.jsonpCallback,
       callbackName = ($.isFunction(_callbackName) ?
         _callbackName() : _callbackName) || ('jsonp' + (++jsonpID)),
       script = document.createElement('script'),
-      cleanup = function() {
-        clearTimeout(abortTimeout)
-        $(script).remove()
-        delete window[callbackName]
-      },
-      abort = function(type){
-        cleanup()
-        // In case of manual abort or timeout, keep an empty function as callback
-        // so that the SCRIPT tag that eventually loads won't result in an error.
-        if (!type || type == 'timeout') window[callbackName] = empty
-        ajaxError(null, type || 'abort', xhr, options)
+      originalCallback = window[callbackName],
+      responseData,
+      abort = function(errorType) {
+        $(script).triggerHandler('error', errorType || 'abort')
       },
       xhr = { abort: abort }, abortTimeout
 
+    if (deferred) deferred.promise(xhr)
+
+    $(script).on('load error', function(e, errorType){
+      clearTimeout(abortTimeout)
+      $(script).off().remove()
+
+      if (e.type == 'error' || !responseData) {
+        ajaxError(null, errorType || 'error', xhr, options, deferred)
+      } else {
+        ajaxSuccess(responseData[0], xhr, options, deferred)
+      }
+
+      window[callbackName] = originalCallback
+      if (responseData && $.isFunction(originalCallback))
+        originalCallback(responseData[0])
+
+      originalCallback = responseData = undefined
+    })
+
     if (ajaxBeforeSend(xhr, options) === false) {
       abort('abort')
-      return false
+      return xhr
     }
 
-    window[callbackName] = function(data){
-      cleanup()
-      ajaxSuccess(data, xhr, options)
+    window[callbackName] = function(){
+      responseData = arguments
     }
-
-    script.onerror = function() { abort('error') }
 
     script.src = options.url.replace(/=\?/, '=' + callbackName)
-    $('head').append(script)
+    document.head.appendChild(script)
 
     if (options.timeout > 0) abortTimeout = setTimeout(function(){
       abort('timeout')
@@ -132,8 +143,9 @@
       return new window.XMLHttpRequest()
     },
     // MIME types mapping
+    // IIS returns Javascript as "application/x-javascript"
     accepts: {
-      script: 'text/javascript, application/javascript',
+      script: 'text/javascript, application/javascript, application/x-javascript',
       json:   jsonType,
       xml:    'application/xml, text/xml',
       html:   htmlType,
@@ -167,11 +179,12 @@
     if (options.processData && options.data && $.type(options.data) != "string")
       options.data = $.param(options.data, options.traditional)
     if (options.data && (!options.type || options.type.toUpperCase() == 'GET'))
-      options.url = appendQuery(options.url, options.data)
+      options.url = appendQuery(options.url, options.data), options.data = undefined
   }
 
   $.ajax = function(options){
-    var settings = $.extend({}, options || {})
+    var settings = $.extend({}, options || {}),
+        deferred = $.Deferred && $.Deferred()
     for (key in $.ajaxSettings) if (settings[key] === undefined) settings[key] = $.ajaxSettings[key]
 
     ajaxStart(settings)
@@ -188,31 +201,38 @@
       if (!hasPlaceholder)
         settings.url = appendQuery(settings.url,
           settings.jsonp ? (settings.jsonp + '=?') : settings.jsonp === false ? '' : 'callback=?')
-      return $.ajaxJSONP(settings)
+      return $.ajaxJSONP(settings, deferred)
     }
 
     var mime = settings.accepts[dataType],
-        baseHeaders = { },
+        headers = { },
+        setHeader = function(name, value) { headers[name.toLowerCase()] = [name, value] },
         protocol = /^([\w-]+:)\/\//.test(settings.url) ? RegExp.$1 : window.location.protocol,
-        xhr = settings.xhr(), abortTimeout
+        xhr = settings.xhr(),
+        nativeSetHeader = xhr.setRequestHeader,
+        abortTimeout
 
-    if (!settings.crossDomain) baseHeaders['X-Requested-With'] = 'XMLHttpRequest'
-    if (mime) {
-      baseHeaders['Accept'] = mime
+    if (deferred) deferred.promise(xhr)
+
+    if (!settings.crossDomain) setHeader('X-Requested-With', 'XMLHttpRequest')
+    setHeader('Accept', mime || '*/*')
+    if (mime = settings.mimeType || mime) {
       if (mime.indexOf(',') > -1) mime = mime.split(',', 2)[0]
       xhr.overrideMimeType && xhr.overrideMimeType(mime)
     }
     if (settings.contentType || (settings.contentType !== false && settings.data && settings.type.toUpperCase() != 'GET'))
-      baseHeaders['Content-Type'] = (settings.contentType || 'application/x-www-form-urlencoded')
-    settings.headers = $.extend(baseHeaders, settings.headers || {})
+      setHeader('Content-Type', settings.contentType || 'application/x-www-form-urlencoded')
+
+    if (settings.headers) for (name in settings.headers) setHeader(name, settings.headers[name])
+    xhr.setRequestHeader = setHeader
 
     xhr.onreadystatechange = function(){
       if (xhr.readyState == 4) {
-        xhr.onreadystatechange = empty;
+        xhr.onreadystatechange = empty
         clearTimeout(abortTimeout)
         var result, error = false
         if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304 || (xhr.status == 0 && protocol == 'file:')) {
-          dataType = dataType || mimeToDataType(xhr.getResponseHeader('content-type'))
+          dataType = dataType || mimeToDataType(settings.mimeType || xhr.getResponseHeader('content-type'))
           result = xhr.responseText
 
           try {
@@ -222,28 +242,31 @@
             else if (dataType == 'json') result = blankRE.test(result) ? null : $.parseJSON(result)
           } catch (e) { error = e }
 
-          if (error) ajaxError(error, 'parsererror', xhr, settings)
-          else ajaxSuccess(result, xhr, settings)
+          if (error) ajaxError(error, 'parsererror', xhr, settings, deferred)
+          else ajaxSuccess(result, xhr, settings, deferred)
         } else {
-          ajaxError(xhr.statusText || null, xhr.status ? 'error' : 'abort', xhr, settings)
+          ajaxError(xhr.statusText || null, xhr.status ? 'error' : 'abort', xhr, settings, deferred)
         }
       }
     }
 
-    var async = 'async' in settings ? settings.async : true
-    xhr.open(settings.type, settings.url, async)
-
-    for (name in settings.headers) xhr.setRequestHeader(name, settings.headers[name])
-
     if (ajaxBeforeSend(xhr, settings) === false) {
       xhr.abort()
-      return false
+      ajaxError(null, 'abort', xhr, settings, deferred)
+      return xhr
     }
+
+    if (settings.xhrFields) for (name in settings.xhrFields) xhr[name] = settings.xhrFields[name]
+
+    var async = 'async' in settings ? settings.async : true
+    xhr.open(settings.type, settings.url, async, settings.username, settings.password)
+
+    for (name in headers) nativeSetHeader.apply(xhr, headers[name])
 
     if (settings.timeout > 0) abortTimeout = setTimeout(function(){
         xhr.onreadystatechange = empty
         xhr.abort()
-        ajaxError(null, 'timeout', xhr, settings)
+        ajaxError(null, 'timeout', xhr, settings, deferred)
       }, settings.timeout)
 
     // avoid sending empty string (#319)
@@ -297,10 +320,11 @@
   var escape = encodeURIComponent
 
   function serialize(params, obj, traditional, scope){
-    var type, array = $.isArray(obj)
+    var type, array = $.isArray(obj), hash = $.isPlainObject(obj)
     $.each(obj, function(key, value) {
       type = $.type(value)
-      if (scope) key = traditional ? scope : scope + '[' + (array ? '' : key) + ']'
+      if (scope) key = traditional ? scope :
+        scope + '[' + (hash || type == 'object' || type == 'array' ? key : '') + ']'
       // handle data in serializeArray() format
       if (!scope && array) params.add(value.name, value.value)
       // recurse into nested objects
