@@ -2,7 +2,7 @@
 require 'shelljs/make'
 fs = require 'fs'
 
-version   = '1.1.2'
+version   = '1.1.3'
 zepto_js  = 'dist/zepto.js'
 zepto_min = 'dist/zepto.min.js'
 zepto_gz  = 'dist/zepto.min.gz'
@@ -89,7 +89,10 @@ describe_version = ->
 
 minify = (source_code) ->
   uglify = require('uglify-js')
-  ast = uglify.parser.parse(source_code)
-  ast = uglify.uglify.ast_mangle(ast)
-  ast = uglify.uglify.ast_squeeze(ast)
-  uglify.uglify.gen_code(ast)
+  compressor = uglify.Compressor()
+  ast = uglify.parse(source_code)
+  ast.figure_out_scope()
+  ast.compute_char_frequency();
+  ast.mangle_names();
+  ast = ast.transform(compressor)
+  return ast.print_to_string()

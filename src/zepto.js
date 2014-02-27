@@ -1,5 +1,5 @@
 //     Zepto.js
-//     (c) 2010-2013 Thomas Fuchs
+//     (c) 2010-2014 Thomas Fuchs
 //     Zepto.js may be freely distributed under the MIT license.
 
 var Zepto = (function() {
@@ -26,8 +26,6 @@ var Zepto = (function() {
       '*': document.createElement('div')
     },
     readyRE = /complete|loaded|interactive/,
-    classSelectorRE = /^\.([\w-]+)$/,
-    idSelectorRE = /^#([\w-]*)$/,
     simpleSelectorRE = /^[\w-]*$/,
     class2type = {},
     toString = class2type.toString,
@@ -47,7 +45,9 @@ var Zepto = (function() {
       'usemap': 'useMap',
       'frameborder': 'frameBorder',
       'contenteditable': 'contentEditable'
-    }
+    },
+    isArray = Array.isArray ||
+      function(object){ return object instanceof Array }
 
   zepto.matches = function(element, selector) {
     if (!selector || !element || element.nodeType !== 1) return false
@@ -74,7 +74,6 @@ var Zepto = (function() {
   function isPlainObject(obj) {
     return isObject(obj) && !isWindow(obj) && Object.getPrototypeOf(obj) == Object.prototype
   }
-  function isArray(value) { return value instanceof Array }
   function likeArray(obj) { return typeof obj.length == 'number' }
 
   function compact(array) { return filter.call(array, function(item){ return item != null }) }

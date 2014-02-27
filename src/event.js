@@ -1,9 +1,9 @@
 //     Zepto.js
-//     (c) 2010-2013 Thomas Fuchs
+//     (c) 2010-2014 Thomas Fuchs
 //     Zepto.js may be freely distributed under the MIT license.
 
 ;(function($){
-  var $$ = $.zepto.qsa, _zid = 1, undefined,
+  var _zid = 1, undefined,
       slice = Array.prototype.slice,
       isFunction = $.isFunction,
       isString = function(obj){ return typeof obj == 'string' },

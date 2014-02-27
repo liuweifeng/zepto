@@ -1,5 +1,5 @@
 //     Zepto.js
-//     (c) 2010-2013 Thomas Fuchs
+//     (c) 2010-2014 Thomas Fuchs
 //     Zepto.js may be freely distributed under the MIT license.
 
 ;(function($){
@@ -113,7 +113,7 @@
       responseData = arguments
     }
 
-    script.src = options.url.replace(/=\?/, '=' + callbackName)
+    script.src = options.url.replace(/\?(.+)=\?/, '?$1=' + callbackName)
     document.head.appendChild(script)
 
     if (options.timeout > 0) abortTimeout = setTimeout(function(){
@@ -196,7 +196,7 @@
     serializeData(settings)
     if (settings.cache === false) settings.url = appendQuery(settings.url, '_=' + Date.now())
 
-    var dataType = settings.dataType, hasPlaceholder = /=\?/.test(settings.url)
+    var dataType = settings.dataType, hasPlaceholder = /\?.+=\?/.test(settings.url)
     if (dataType == 'jsonp' || hasPlaceholder) {
       if (!hasPlaceholder)
         settings.url = appendQuery(settings.url,
@@ -276,26 +276,27 @@
 
   // handle optional data/success arguments
   function parseArguments(url, data, success, dataType) {
-    var hasData = !$.isFunction(data)
+    if ($.isFunction(data)) dataType = success, success = data, data = undefined
+    if (!$.isFunction(success)) dataType = success, success = undefined
     return {
-      url:      url,
-      data:     hasData  ? data : undefined,
-      success:  !hasData ? data : $.isFunction(success) ? success : undefined,
-      dataType: hasData  ? dataType || success : success
+      url: url
+    , data: data
+    , success: success
+    , dataType: dataType
     }
   }
 
-  $.get = function(url, data, success, dataType){
+  $.get = function(/* url, data, success, dataType */){
     return $.ajax(parseArguments.apply(null, arguments))
   }
 
-  $.post = function(url, data, success, dataType){
+  $.post = function(/* url, data, success, dataType */){
     var options = parseArguments.apply(null, arguments)
     options.type = 'POST'
     return $.ajax(options)
   }
 
-  $.getJSON = function(url, data, success){
+  $.getJSON = function(/* url, data, success */){
     var options = parseArguments.apply(null, arguments)
     options.dataType = 'json'
     return $.ajax(options)
